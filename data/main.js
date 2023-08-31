@@ -74,7 +74,7 @@ sentences.push({
 });
 sentences.push({ text: "Aperture Science Sentry\n", speed: 1 });
 sentences.push({ text: "Unit [FUAX-3722-1628]\n", speed: 1 });
-sentences.push({ text: "Retreiving Status", speed: 1 });
+sentences.push({ text: "Retrieving Status", speed: 1 });
 sentences.push({ text: "........\n", speed: 0.1 });
 sentences.push({ text: "Status: [Online]\n", speed: 1 });
 

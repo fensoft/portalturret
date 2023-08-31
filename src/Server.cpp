@@ -1,3 +1,23 @@
+#include <Arduino.h>
+#include <ESPAsyncWebServer.h>
+#include <WebSocketsServer.h>
+#include <PortalTypes.h>
+#include <LittleFS.h>
+#include <Servo.h>
+
+extern AsyncWebServer server;
+extern TurretMode currentTurretMode;
+extern Servo rotateServo;
+extern Servo wingServo;
+extern int currentRotateAngle;
+extern bool diagnoseMode;
+extern int diagnoseAction;
+extern int currentMoveSpeed;
+void setManualState(ManualState nextState);
+String processor(const String &var);
+void requestReboot();
+void setState(TurretState nextState);
+
 void startWebServer()
 {
   Serial.println("Start webserver");

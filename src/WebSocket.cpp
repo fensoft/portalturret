@@ -1,3 +1,16 @@
+#include <Arduino.h>
+#include <WebSocketsServer.h>
+#include "PortalTypes.h"
+#include <Servo.h>
+
+extern WebSocketsServer webSocket;
+extern bool websocketStarted;
+extern int8_t currentRotateDirection;
+extern Servo rotateServo;
+void setManualState(ManualState nextState);
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t lenght);
+bool isOpen();
+
 void startWebSocket()
 {
   // Start a WebSocket server
