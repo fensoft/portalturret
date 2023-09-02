@@ -1,7 +1,11 @@
 #include <Arduino.h>
 #include <WebSocketsServer.h>
 #include "PortalTypes.h"
+#ifdef ESP32
+#include <Deneyap_Servo.h>
+#else
 #include <Servo.h>
+#endif
 
 extern WebSocketsServer webSocket;
 extern bool websocketStarted;

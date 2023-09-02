@@ -1,4 +1,11 @@
+#pragma once
 
+#include "DFRobotDFPlayerMini.h"
+extern DFRobotDFPlayerMini myDFPlayer;
+extern Servo wingServo;
+extern Servo rotateServo;
+#include <FastLED.h>
+extern CRGB leds[NUM_LEDS];
 
 COROUTINE(openWingsRoutine) {
   COROUTINE_BEGIN();
@@ -108,14 +115,12 @@ COROUTINE(engagingRoutine) {
     }
     myDFPlayer.playFolder(9, 13);
 #endif
-    alarm = true;
     fromTime = millis();
 #ifdef USE_AUDIO
     COROUTINE_AWAIT(isPlayingAudio() || (!isPlayingAudio() && millis() > fromTime + 1000));
     COROUTINE_AWAIT(!isPlayingAudio());
     myDFPlayer.playFolder(9, 8);
 #endif
-    alarm = false;
     fromTime = millis();
     toTime = fromTime + 1200;
 

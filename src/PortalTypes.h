@@ -1,3 +1,5 @@
+#pragma once
+
 enum class TurretMode {
   Automatic = 0,
   Manual = 1
@@ -21,6 +23,3 @@ enum class ManualState {
   Closing,
   Firing,
 };
-
-#define WIFI_CRED_FILE "settings.txt"
-#define STATIONARY_ANGLE 90

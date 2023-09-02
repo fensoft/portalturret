@@ -1,3 +1,5 @@
+#pragma once
+
 void i2cScan() {
   byte error, address; //variable for error and I2C address
   int nDevices;

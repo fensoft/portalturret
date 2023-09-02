@@ -2,10 +2,16 @@
 #include "Arduino.h"
 
 //Network
+#ifdef ESP32
+#include <WiFi.h>
+#include <AsyncTCP.h>
+#include <ESPmDNS.h>
+#else
 #include <ESP8266WiFi.h>
 #include <ESP8266mDNS.h> // Include the mDNS library
 #include <ESP8266httpUpdate.h>
 #include <ESPAsyncTCP.h>
+#endif
 #include <ESPAsyncWebServer.h>
 #include <WebSocketsServer.h>
 #include <ArduinoOTA.h>
@@ -14,44 +20,22 @@
 //Storage
 #include "LittleFS.h"
 
-//Routines
-#include <AceRoutine.h>
-
 //Devices
 #include <FastLED.h>
+#ifdef ESP32
+#include <Deneyap_Servo.h>
+#else
 #include <Servo.h>
+#endif
 #include "SoftwareSerial.h"
 #include "DFRobotDFPlayerMini.h"
+
+#include "StateMachine.hpp"
 
 void startWebServer();
 void startWebSocket();
 
-using namespace ace_routine;
-
-//Tweak these according to servo speed
-#define OPEN_DURATION 1000
-#define CLOSE_STOP_DELAY 100
-#define MAX_ROTATION 50
-
-#define USE_AUDIO
-
-#define BUSY D0
-#define CENTER_LED D3
-#define GUN_LEDS D4
-#define RING_LEDS D8
-#define SERVO_A D6
-#define SERVO_B D7
-#define WING_SWITCH D5
-#define PID A0
-
-#define CENTER_ANGLE 90
-#define NUM_LEDS 8
-
-#define GFORCE_PICKED_UP_MIN 8
-#define GFORCE_PICKED_UP_MAX 12
-#define GFORCE_STEADY_MIN 9.5
-#define GFORCE_STEADY_MAX 10.5
-#define TIPPED_OVER_Z_TRESHOLD 5
+#include "config.h"
 
 CRGB leds[NUM_LEDS];
 
@@ -60,7 +44,7 @@ CRGB leds[NUM_LEDS];
 Servo wingServo;
 Servo rotateServo;
 
-SoftwareSerial mySoftwareSerial(RX, TX); // RX, TX
+SoftwareSerial mySoftwareSerial(MP3_RX, MP3_TX); // RX, TX
 DFRobotDFPlayerMini myDFPlayer;
 
 #define FREQ 50     //one clock is 20 ms
@@ -77,223 +61,25 @@ unsigned long nextWebSocketUpdateTime = 0;
 
 bool wingsOpen;
 bool wasOpen;
-bool fullyOpened;
-bool alarm;
 bool needsSetup;
 bool myDFPlayerSetup = false;
 bool shouldUpdate = false;
 int diagnoseAction = -1;
 
-bool isOpen() {
-  return digitalRead(WING_SWITCH) == HIGH;
-}
-
-//For some reason we need to cache this value, as checking it every loop causes the webserver to freeze.
-//https://github.com/me-no-dev/ESPAsyncWebServer/issues/944
-bool isDetectingMotionCached = false;
-unsigned long lastMotionCheck = 0;
-bool isDetectingMotion() {
-  unsigned long curMillis = millis();
-  if (curMillis > lastMotionCheck + 50) {
-    isDetectingMotionCached = analogRead(A0) > 512;
-    lastMotionCheck = curMillis;
-  }
-  return isDetectingMotionCached;
-}
-
-bool isPlayingAudio() {
-  return digitalRead(BUSY) == LOW;
-}
-
 #include "Accelerometer.h"
-#include "Routines.h"
-#include "StateBehaviour.h"
 
 TurretMode currentTurretMode;
 TurretState currentState = TurretState::Idle;
-ManualState currentManualState = ManualState::Idle;
 
 unsigned long detectTime = 0;
 unsigned long undetectTime = 0;
 unsigned long previousTime = 0;
-unsigned long stateStartTime = 0;
-unsigned long lastMovementTime = 0;
-
-void setState(TurretState nextState) {
-
-  //Stop the Wing Servos just in case;
-  wingServo.write(STATIONARY_ANGLE);
-  
-  if (currentTurretMode == TurretMode::Automatic) {
-    switch (nextState) {
-      case TurretState::Activated:
-        activatedRoutine.reset();
-        break;
-      case TurretState::Engaging:
-        engagingRoutine.reset();
-        break;
-      case TurretState::Searching:
-        searchingRoutine.reset();
-        break;
-      case TurretState::TargetLost:
-        targetLostRoutine.reset();
-        break;
-      case TurretState::PickedUp:
-        pickedUpRoutine.reset();
-        break;
-      case TurretState::Shutdown:
-        shutdownRoutine.reset();
-        break;
-      case TurretState::ManualEngaging:
-        manualEngagingRoutine.reset();
-        break;
-      case TurretState::Rebooting:
-        rebootRoutine.reset();
-        break;
-    }
-    stateStartTime = millis();
-    currentState = nextState;
-  }
-}
-
-void setManualState(ManualState nextState) {
-
-  //Stop the Wing Servos just in case;
-  wingServo.write(STATIONARY_ANGLE);
-
-  
-  if (currentTurretMode == TurretMode::Manual) {
-    switch (nextState) {
-      case ManualState::Opening:
-        openWingsRoutine.reset();
-        break;
-      case ManualState::Closing:
-        closeWingsRoutine.reset();
-        break;
-      case ManualState::Firing:
-        manualEngagingRoutine.reset();
-        break;
-    }
-    currentManualState = nextState;
-  }
-}
-
-void manualRotation(unsigned long deltaTime) {
-  manualMovementRoutine.runCoroutine();
-}
-void stateBehaviour() {
-
-  unsigned long deltaTime = millis() - previousTime;
-  previousTime = millis();
-
-  if (currentTurretMode == TurretMode::Manual) {
-    switch (currentManualState) {
-      case ManualState::Idle:
-        manualRotation(deltaTime);
-        break;
-      case ManualState::Opening:
-        openWingsRoutine.runCoroutine();
-        if (openWingsRoutine.isDone()) {
-          setManualState(ManualState::Idle);
-        }
-        break;
-      case ManualState::Closing:
-        closeWingsRoutine.runCoroutine();
-        if (closeWingsRoutine.isDone()) {
-          setManualState(ManualState::Idle);
-        }
-        break;
-      case ManualState::Firing:
-        manualRotation(deltaTime);
-        manualEngagingRoutine.runCoroutine();
-        if (manualEngagingRoutine.isDone()) {
-          setManualState(ManualState::Idle);
-        }
-        break;
-    }
-  }
-  if (currentTurretMode == TurretMode::Automatic) {
-    
-    bool motionDetected = isDetectingMotion();
-    float zMovement = (smoothZ / measurements * SENSORS_GRAVITY_STANDARD * ADXL345_MG2G_MULTIPLIER);
-    bool pickedUp = accelerometerBuffered && (zMovement < GFORCE_PICKED_UP_MIN || zMovement > GFORCE_PICKED_UP_MAX);
-    bool movedAround = accelerometerBuffered && (zMovement < GFORCE_STEADY_MIN || zMovement > GFORCE_STEADY_MAX);
-    bool onItsSide = accelerometerBuffered && (zMovement < TIPPED_OVER_Z_TRESHOLD);
-    
-    if (movedAround) {
-      lastMovementTime = millis();
-    }
-
-    if (pickedUp && currentState != TurretState::PickedUp && currentState != TurretState::Shutdown && currentState != TurretState::Rebooting) {
-      setState(TurretState::PickedUp);
-    }
-    switch (currentState) {
-      case TurretState::Idle:
-        if (motionDetected) {
-          setState(TurretState::Activated);
-        }
-        break;
-      case TurretState::Activated:
-        activatedRoutine.runCoroutine();
-        if (activatedRoutine.isDone()) {
-          if (motionDetected) {
-            setState(TurretState::Engaging);
-          } else {
-            setState(TurretState::Searching);
-          }
-        }
-        break;
-      case TurretState::Searching:
-        searchingRoutine.runCoroutine();
-        if (millis() > stateStartTime + 10000) {
-          setState(TurretState::TargetLost);
-        }
-        if (motionDetected && millis() > stateStartTime + 100) {
-          setState(TurretState::Engaging);
-        }
-        break;
-      case TurretState::TargetLost:
-        targetLostRoutine.runCoroutine();
-        if (targetLostRoutine.isDone()) {
-          setState(TurretState::Idle);
-        }
-        break;
-      case TurretState::Engaging:
-        engagingRoutine.runCoroutine();
-        if (engagingRoutine.isDone()) {
-          if (wingsOpen) {
-            setState(TurretState::Searching);
-          } else {
-            setState(TurretState::Idle);
-          }
-        }
-        break;
-      case TurretState::PickedUp:
-        pickedUpRoutine.runCoroutine();
-        if (onItsSide) {
-          setState(TurretState::Shutdown);
-        }
-        else if (!movedAround && millis() > lastMovementTime + 5000) {
-          setState(TurretState::Activated);
-        }
-        break;
-      case TurretState::Shutdown:
-        shutdownRoutine.runCoroutine();
-        if (shutdownRoutine.isDone() && !onItsSide) {
-          setState(TurretState::Rebooting);
-        }
-        break;
-      case TurretState::Rebooting:
-        rebootRoutine.runCoroutine();
-        if (rebootRoutine.isDone()) {
-          setState(TurretState::Idle);
-        }
-        break;
-    }
-  }
-}
-
 bool isConnected;
+
+#ifdef ESP32
+#include <DNSServer.h>
+DNSServer dnsServer;
+#endif
 
 void UpdateLEDPreloader() {
   int t = floor(millis() / 10);
@@ -305,10 +91,11 @@ void UpdateLEDPreloader() {
 
 void setup()
 {
-
   Serial.begin(9600);
+  Serial.println("LittleFS initializing...");
   // Initialize LittleFS
   if (!LittleFS.begin()) {
+    Serial.println("Error while initializing littleFS");
     while (true) { }
     return;
   }
@@ -328,7 +115,6 @@ void setup()
 
   rotateServo.write(90);
   delay(250);
-  fullyOpened = false;
   wingServo.write(STATIONARY_ANGLE + 90);
   while(isOpen()) {
     delay(10);
@@ -345,22 +131,25 @@ void setup()
 
   WiFi.hostname("turret");
   WiFi.mode(WIFI_STA);
-  WiFi.begin(esid, epass);
+  WiFi.begin(esid.c_str(), epass.c_str());
+  Serial.println("Connecting to " + esid + "(" + epass + ")");
 
   unsigned long m = millis();
   while (WiFi.status() != WL_CONNECTED)
   {
-    Serial.println("Starting wifi");
+    Serial.print("\r");
+    Serial.print(millis());
     UpdateLEDPreloader();
-    delay(50);
+    delay(500);
     if (m + 10000 < millis()) {
       WiFi.disconnect();
       break;
     }
   }
+  Serial.println();
 
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("Not connected");
+    Serial.println("Not connected. AP MODE");
     WiFi.disconnect();
     WiFi.mode(WIFI_AP);
 
@@ -369,12 +158,17 @@ void setup()
     //Preemtive scan of networks, just in case.
     WiFi.scanNetworks(true);
 
-    IPAddress local_IP(192, 168, 4, 1);
-    IPAddress gateway(192, 168, 4, 1);
+    IPAddress local_IP(8, 8, 8, 8);
+    IPAddress gateway(8, 8, 8, 8);
     IPAddress subnet(255, 255, 255, 0);
 
     WiFi.softAPConfig(local_IP, gateway, subnet);
     WiFi.softAP("Portal Turret");
+
+#ifdef ESP32
+    dnsServer.setErrorReplyCode(DNSReplyCode::NoError); 
+    dnsServer.start(53, "*", local_IP);
+#endif
 
   } else {
     Serial.println("Connected");
@@ -385,7 +179,6 @@ void setup()
   UpdateLEDPreloader();
 
   currentState = TurretState::Idle;
-  currentManualState = ManualState::Idle;
   currentTurretMode = TurretMode::Automatic;
 
   wasOpen = isOpen();
@@ -401,7 +194,11 @@ void setup()
   UpdateLEDPreloader();
 
   Serial.println("Begin MDNS");
+#ifndef ESP32
   if (MDNS.begin("turret", WiFi.localIP())) {
+#else
+  if (MDNS.begin("turret")) {
+#endif
     Serial.println("MDNS setup");
     MDNS.addService("http", "tcp", 80);
     MDNS.addService("http", "tcp", 81);
@@ -409,7 +206,9 @@ void setup()
     Serial.println("MDNS failed");
   }
   delay(200);
+#ifndef ESP32
   Serial.end();
+#endif
 
   UpdateLEDPreloader();
 
@@ -463,6 +262,7 @@ void setup()
   }
 
   previousTime = millis();
+  Serial.println("Setup complete");
 }
 
 void preloader(uint8_t led) {
@@ -473,11 +273,14 @@ void preloader(uint8_t led) {
 
 void loop()
 {
+#ifndef ESP32
   MDNS.update();
+#else
+  dnsServer.processNextRequest();
+#endif
   //if (!isConnected) return;
 
   wingsOpen = isOpen();
-
   ArduinoOTA.handle();
   webSocket.loop();
   if (!diagnoseMode) {

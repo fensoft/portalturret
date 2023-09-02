@@ -3,7 +3,12 @@
 #include <WebSocketsServer.h>
 #include <PortalTypes.h>
 #include <LittleFS.h>
+#ifdef ESP32
+#include <Deneyap_Servo.h>
+#else
 #include <Servo.h>
+#endif
+#include "config.h"
 
 extern AsyncWebServer server;
 extern TurretMode currentTurretMode;
@@ -18,10 +23,25 @@ String processor(const String &var);
 void requestReboot();
 void setState(TurretState nextState);
 
+class CaptiveRequestHandler : public AsyncWebHandler {
+public:
+  CaptiveRequestHandler() {}
+  virtual ~CaptiveRequestHandler() {}
+
+  bool canHandle(AsyncWebServerRequest *request) override {
+    return request->host() != WiFi.softAPIP().toString();
+  }
+
+  void handleRequest(AsyncWebServerRequest *request) {
+    request->redirect(String() + "http://" +  WiFi.softAPIP().toString() + "/setup");
+  }
+};
+
 void startWebServer()
 {
   Serial.println("Start webserver");
   server.serveStatic("/", LittleFS, "/");
+  server.addHandler(new CaptiveRequestHandler()).setFilter(ON_AP_FILTER);
   server.on("/", HTTP_GET, [](AsyncWebServerRequest * request)
   {
     request->send(LittleFS, "index.html", String(), false, processor);
@@ -44,23 +64,22 @@ void startWebServer()
   server.on("/setup", HTTP_POST, [](AsyncWebServerRequest * request) {
 
     if (request->hasParam("ssid", true) && request->hasParam("pw", true)) {
-      Serial.println("Get SSID");
       AsyncWebParameter* ssid = request->getParam("ssid", true);
-      Serial.println("Get PW");
       AsyncWebParameter* pw = request->getParam("pw", true);
 
-      const char* ssidStr = ssid->value().c_str();
-      const char* passwordStr = pw->value().c_str();
+      Serial.println("Saving SSID " + ssid->value() + "(" + pw->value() + ")");
 
-      File wifiCreds = LittleFS.open(WIFI_CRED_FILE, "w+");
-      wifiCreds.print(ssidStr);
+      File wifiCreds = LittleFS.open(WIFI_CRED_FILE, FILE_WRITE);
+      wifiCreds.print(ssid->value());
       wifiCreds.print("\r\n");
-      wifiCreds.print(passwordStr);
+      wifiCreds.print(pw->value());
       wifiCreds.print("\r\n");
+      wifiCreds.flush();
       wifiCreds.close();
     }
 
     request->send(200, "text/html", "ok");
+    LittleFS.end();
     requestReboot();
   });
 
@@ -78,7 +97,9 @@ void startWebServer()
         json += ",\"bssid\":\"" + WiFi.BSSIDstr(i) + "\"";
         json += ",\"channel\":" + String(WiFi.channel(i));
         json += ",\"secure\":" + String(WiFi.encryptionType(i));
+#ifndef ESP32
         json += ",\"hidden\":" + String(WiFi.isHidden(i) ? "true" : "false");
+#endif
         json += "}";
       }
       WiFi.scanDelete();
@@ -187,7 +208,6 @@ void startWebServer()
   });
 
   //DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
-  Serial.println("server.begin()");
   server.begin();
 }
 
