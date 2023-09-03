@@ -38,10 +38,12 @@ CRGB leds[NUM_LEDS];
 Servo wingServo;
 Servo rotateServo;
 
+#ifdef USE_AUDIO
 SoftwareSerial mySoftwareSerial(MP3_RX, MP3_TX); // RX, TX
 #include "mp3_driver.h"
 #include "mp3_driver_factory.h"
 Mp3Driver* mp3_driver;
+#endif
 
 #define FREQ 50     //one clock is 20 ms
 #define FREQ_MINIMUM 205 //1ms is 1/20, of 4096
@@ -87,10 +89,10 @@ void UpdateLEDPreloader() {
 void setup()
 {
   Serial.begin(9600);
-  LOG_INIT(&Serial);
-  mySoftwareSerial.begin(9600);
   delay(500);
 #ifdef USE_AUDIO
+  LOG_INIT(&Serial);
+  mySoftwareSerial.begin(9600);
   Serial.println("Starting MP3 module...");
   mp3_driver = new_mp3_driver(&mySoftwareSerial, BUSY);
   mp3_driver->setVolume(15);
@@ -364,7 +366,11 @@ void loop()
       ((uint8_t)(a >> 8)) & 0xFF,
       ((uint8_t)a) & 0xFF,
       (uint8_t) currentState,
+#ifdef USE_AUDIO
       (mp3_driver->isBusy() ? 1 : 0),
+#else
+      0,
+#endif
     };
     webSocket.broadcastBIN(values, 12);
   }
