@@ -3,11 +3,7 @@
 #include <WebSocketsServer.h>
 #include <PortalTypes.h>
 #include <LittleFS.h>
-#ifdef ESP32
-#include <Deneyap_Servo.h>
-#else
-#include <Servo.h>
-#endif
+#include "PortalServo.h"
 #include "config.h"
 
 extern AsyncWebServer server;
@@ -44,7 +40,7 @@ void startWebServer()
   server.addHandler(new CaptiveRequestHandler()).setFilter(ON_AP_FILTER);
   server.on("/", HTTP_GET, [](AsyncWebServerRequest * request)
   {
-    request->send(LittleFS, "index.html", String(), false, processor);
+    request->send(LittleFS, "/index.html", String(), false, processor);
   });
 
   server.onNotFound([](AsyncWebServerRequest * request)
@@ -69,7 +65,7 @@ void startWebServer()
 
       Serial.println("Saving SSID " + ssid->value() + "(" + pw->value() + ")");
 
-      File wifiCreds = LittleFS.open(WIFI_CRED_FILE, FILE_WRITE);
+      File wifiCreds = LittleFS.open(WIFI_CRED_FILE, "w");
       wifiCreds.print(ssid->value());
       wifiCreds.print("\r\n");
       wifiCreds.print(pw->value());

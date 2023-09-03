@@ -1,11 +1,7 @@
 #include <Arduino.h>
 #include <WebSocketsServer.h>
 #include "PortalTypes.h"
-#ifdef ESP32
-#include <Deneyap_Servo.h>
-#else
-#include <Servo.h>
-#endif
+#include "PortalServo.h"
 
 extern WebSocketsServer webSocket;
 extern bool websocketStarted;
@@ -21,7 +17,7 @@ void startWebSocket()
   webSocket.begin();
   webSocket.onEvent(webSocketEvent); // if there's an incomming websocket message, go to function 'webSocketEvent'
   websocketStarted = true;
-  //Serial.println("WebSocket server started.");
+  Serial.println("WebSocket server started.");
 }
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t lenght)

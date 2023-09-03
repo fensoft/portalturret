@@ -1,7 +1,7 @@
 #pragma once
 
-#include "DFRobotDFPlayerMini.h"
-extern DFRobotDFPlayerMini myDFPlayer;
+#include "mp3_driver.h"
+extern Mp3Driver* mp3_driver;
 extern Servo wingServo;
 extern Servo rotateServo;
 #include <FastLED.h>
@@ -35,9 +35,9 @@ COROUTINE(activatedRoutine) {
   COROUTINE_BEGIN();
 
 #ifdef USE_AUDIO
-  if (isPlayingAudio()) {
-    myDFPlayer.stop();
-    COROUTINE_AWAIT(!isPlayingAudio());
+  if (mp3_driver->isBusy()) {
+    mp3_driver->stop();
+    COROUTINE_AWAIT(!mp3_driver->isBusy());
   }
 #endif
 
@@ -49,9 +49,9 @@ COROUTINE(activatedRoutine) {
   closedAtStart = !isOpen();
 
 #ifdef USE_AUDIO
-  myDFPlayer.playFolder(1, random(1, 9));
-  COROUTINE_AWAIT(isPlayingAudio());
-  COROUTINE_AWAIT(!isPlayingAudio());
+  mp3_driver->playSongFromFolder(1, random(1, 9));
+  COROUTINE_AWAIT(mp3_driver->isBusy());
+  COROUTINE_AWAIT(!mp3_driver->isBusy());
 #endif
 
   if (closedAtStart) {
@@ -72,9 +72,9 @@ COROUTINE(searchingRoutine) {
   COROUTINE_BEGIN();
 
 #ifdef USE_AUDIO
-  if (isPlayingAudio()) {
-    myDFPlayer.stop();
-    COROUTINE_AWAIT(!isPlayingAudio());
+  if (mp3_driver->isBusy()) {
+    mp3_driver->stop();
+    COROUTINE_AWAIT(!mp3_driver->isBusy());
   }
 #endif
 
@@ -84,7 +84,7 @@ COROUTINE(searchingRoutine) {
     if (millis() > nextAudioClipTime) {
       nextAudioClipTime = millis() + 5000;
 #ifdef USE_AUDIO
-      myDFPlayer.playFolder(7, random(1, 11));
+      mp3_driver->playSongFromFolder(7, random(1, 11));
 #endif
     }
     float t = millis() / 1000.0;
@@ -109,17 +109,17 @@ COROUTINE(engagingRoutine) {
 
     fromTime = millis();
 #ifdef USE_AUDIO
-    if (isPlayingAudio()) {
-      myDFPlayer.stop();
-      COROUTINE_AWAIT(!isPlayingAudio());
+    if (mp3_driver->isBusy()) {
+      mp3_driver->stop();
+      COROUTINE_AWAIT(!mp3_driver->isBusy());
     }
-    myDFPlayer.playFolder(9, 13);
+    mp3_driver->playSongFromFolder(9, 13);
 #endif
     fromTime = millis();
 #ifdef USE_AUDIO
-    COROUTINE_AWAIT(isPlayingAudio() || (!isPlayingAudio() && millis() > fromTime + 1000));
-    COROUTINE_AWAIT(!isPlayingAudio());
-    myDFPlayer.playFolder(9, 8);
+    COROUTINE_AWAIT(mp3_driver->isBusy() || (!mp3_driver->isBusy() && millis() > fromTime + 1000));
+    COROUTINE_AWAIT(!mp3_driver->isBusy());
+    mp3_driver->playSongFromFolder(9, 8);
 #endif
     fromTime = millis();
     toTime = fromTime + 1200;
@@ -153,14 +153,14 @@ COROUTINE(targetLostRoutine) {
   COROUTINE_BEGIN();
 
 #ifdef USE_AUDIO
-  if (isPlayingAudio()) {
-    myDFPlayer.stop();
-    COROUTINE_AWAIT(!isPlayingAudio());
+  if (mp3_driver->isBusy()) {
+    mp3_driver->stop();
+    COROUTINE_AWAIT(!mp3_driver->isBusy());
   }
-  myDFPlayer.playFolder(6, random(1, 8));
+  mp3_driver->playSongFromFolder(6, random(1, 8));
 
-  COROUTINE_AWAIT(isPlayingAudio());
-  COROUTINE_AWAIT(!isPlayingAudio());
+  COROUTINE_AWAIT(mp3_driver->isBusy());
+  COROUTINE_AWAIT(!mp3_driver->isBusy());
 #endif
 
   rotateServo.write(90);
@@ -177,9 +177,9 @@ COROUTINE(targetLostRoutine) {
 COROUTINE(pickedUpRoutine) {
   COROUTINE_BEGIN();
 #ifdef USE_AUDIO
-  if (isPlayingAudio()) {
-    myDFPlayer.stop();
-    COROUTINE_AWAIT(!isPlayingAudio());
+  if (mp3_driver->isBusy()) {
+    mp3_driver->stop();
+    COROUTINE_AWAIT(!mp3_driver->isBusy());
   }
 #endif
 
@@ -194,7 +194,7 @@ COROUTINE(pickedUpRoutine) {
 #ifdef USE_AUDIO
     if (millis() > nextAudioClipTime) {
       nextAudioClipTime = millis() + 2500;
-      myDFPlayer.playFolder(5, random(1, 11));
+      mp3_driver->playSongFromFolder(5, random(1, 11));
     }
 #endif
     COROUTINE_YIELD();
@@ -210,12 +210,12 @@ COROUTINE(shutdownRoutine) {
   static unsigned long toTime;;
   static unsigned long t;
 #ifdef USE_AUDIO
-  if (isPlayingAudio()) {
-    myDFPlayer.stop();
-    COROUTINE_AWAIT(!isPlayingAudio());
+  if (mp3_driver->isBusy()) {
+    mp3_driver->stop();
+    COROUTINE_AWAIT(!mp3_driver->isBusy());
   }
 
-  myDFPlayer.playFolder(4, random(1, 9));
+  mp3_driver->playSongFromFolder(4, random(1, 9));
 #endif
 
   rotateServo.write(90);
@@ -288,9 +288,9 @@ COROUTINE(manualEngagingRoutine) {
   COROUTINE_BEGIN();
   if (fullyOpened) {
 #ifdef USE_AUDIO
-    if (isPlayingAudio()) {
-      myDFPlayer.stop();
-      COROUTINE_AWAIT(!isPlayingAudio());
+    if (mp3_driver->isBusy()) {
+      mp3_driver->stop();
+      COROUTINE_AWAIT(!mp3_driver->isBusy());
     }
 #endif
     static unsigned long fromTime;
@@ -298,7 +298,7 @@ COROUTINE(manualEngagingRoutine) {
     static int fromAngle;
     static int toAngle;
 #ifdef USE_AUDIO
-    myDFPlayer.playFolder(9, 8);
+    mp3_driver->playSongFromFolder(9, 8);
 #endif
     fromTime = millis();
     toTime = fromTime + 1200;

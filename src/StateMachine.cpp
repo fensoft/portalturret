@@ -1,9 +1,5 @@
 #include <Arduino.h>
-#ifdef ESP32
-#include <Deneyap_Servo.h>
-#else
-#include <Servo.h>
-#endif
+#include "PortalServo.h"
 #include <Adafruit_Sensor.h>
 #include <Adafruit_ADXL345_U.h>
 #include "config.h"
@@ -39,14 +35,10 @@ unsigned long lastMotionCheck = 0;
 bool isDetectingMotion() {
   unsigned long curMillis = millis();
   if (curMillis > lastMotionCheck + 50) {
-    isDetectingMotionCached = analogRead(A0) > 512;
+    isDetectingMotionCached = analogRead(PID) > 512;
     lastMotionCheck = curMillis;
   }
   return isDetectingMotionCached;
-}
-
-bool isPlayingAudio() {
-  return digitalRead(BUSY) == LOW;
 }
 
 void setState(TurretState nextState) {

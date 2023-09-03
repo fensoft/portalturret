@@ -1,5 +1,5 @@
 //General
-#include "Arduino.h"
+#include <Arduino.h>
 
 //Network
 #ifdef ESP32
@@ -22,20 +22,14 @@
 
 //Devices
 #include <FastLED.h>
-#ifdef ESP32
-#include <Deneyap_Servo.h>
-#else
-#include <Servo.h>
-#endif
+#include "config.h"
+#include "PortalServo.h"
 #include "SoftwareSerial.h"
-#include "DFRobotDFPlayerMini.h"
 
 #include "StateMachine.hpp"
 
 void startWebServer();
 void startWebSocket();
-
-#include "config.h"
 
 CRGB leds[NUM_LEDS];
 
@@ -45,7 +39,9 @@ Servo wingServo;
 Servo rotateServo;
 
 SoftwareSerial mySoftwareSerial(MP3_RX, MP3_TX); // RX, TX
-DFRobotDFPlayerMini myDFPlayer;
+#include "mp3_driver.h"
+#include "mp3_driver_factory.h"
+Mp3Driver* mp3_driver;
 
 #define FREQ 50     //one clock is 20 ms
 #define FREQ_MINIMUM 205 //1ms is 1/20, of 4096
@@ -62,7 +58,6 @@ unsigned long nextWebSocketUpdateTime = 0;
 bool wingsOpen;
 bool wasOpen;
 bool needsSetup;
-bool myDFPlayerSetup = false;
 bool shouldUpdate = false;
 int diagnoseAction = -1;
 
@@ -82,7 +77,7 @@ DNSServer dnsServer;
 #endif
 
 void UpdateLEDPreloader() {
-  int t = floor(millis() / 10);
+  int t = floor(millis() / 100);
   for (int i = 0; i < NUM_LEDS; i++) {
     leds[i] = CRGB((i + t) % 8 == 0 ? 255 : 0, 0, 0);
     FastLED.show();
@@ -92,6 +87,16 @@ void UpdateLEDPreloader() {
 void setup()
 {
   Serial.begin(9600);
+  LOG_INIT(&Serial);
+  mySoftwareSerial.begin(9600);
+  delay(500);
+#ifdef USE_AUDIO
+  Serial.println("Starting MP3 module...");
+  mp3_driver = new_mp3_driver(&mySoftwareSerial, BUSY);
+  mp3_driver->setVolume(15);
+  mp3_driver->playSongFromFolder(1, 1+random(mp3_driver->getFileCountInFolder(1)));
+#endif
+
   Serial.println("LittleFS initializing...");
   // Initialize LittleFS
   if (!LittleFS.begin()) {
@@ -109,9 +114,13 @@ void setup()
   }
 
   pinMode(GUN_LEDS, OUTPUT);
-
+#ifdef ESP32
+  wingServo.attach(SERVO_A, 1, 50, 13);
+  rotateServo.attach(SERVO_B, 2, 50, 13);
+#else
   wingServo.attach(SERVO_A);
   rotateServo.attach(SERVO_B);
+#endif
 
   rotateServo.write(90);
   delay(250);
@@ -122,7 +131,6 @@ void setup()
   delay(CLOSE_STOP_DELAY);
   wingServo.write(STATIONARY_ANGLE);
 
-  pinMode(BUSY, INPUT);
   pinMode(WING_SWITCH, INPUT_PULLUP);
 
   File wifiCreds = LittleFS.open(WIFI_CRED_FILE, "r");
@@ -140,7 +148,7 @@ void setup()
     Serial.print("\r");
     Serial.print(millis());
     UpdateLEDPreloader();
-    delay(500);
+    delay(20);
     if (m + 10000 < millis()) {
       WiFi.disconnect();
       break;
@@ -208,15 +216,6 @@ void setup()
   delay(200);
 #ifndef ESP32
   Serial.end();
-#endif
-
-  UpdateLEDPreloader();
-
-#ifdef USE_AUDIO
-  mySoftwareSerial.begin(9600);
-  delay(200);
-  myDFPlayerSetup = myDFPlayer.begin(mySoftwareSerial);
-  if (myDFPlayerSetup) myDFPlayer.volume(15);
 #endif
 
   UpdateLEDPreloader();
@@ -327,7 +326,7 @@ void loop()
         break;
       case 6:
 #ifdef USE_AUDIO
-        myDFPlayer.playFolder(1, random(1, 9));
+        mp3_driver->playSongFromFolder(1, random(1, 9));
 #endif
         break;
     }
@@ -344,9 +343,8 @@ void loop()
 
   if (websocketStarted && millis() > nextWebSocketUpdateTime)
   {
-
     nextWebSocketUpdateTime = millis() + 30;
-    int a = analogRead(A0);
+    int a = analogRead(PID);
 
     updateAccelerometer();
 
@@ -366,7 +364,7 @@ void loop()
       ((uint8_t)(a >> 8)) & 0xFF,
       ((uint8_t)a) & 0xFF,
       (uint8_t) currentState,
-      (isPlayingAudio() ? 1 : 0),
+      (mp3_driver->isBusy() ? 1 : 0),
     };
     webSocket.broadcastBIN(values, 12);
   }

@@ -4,19 +4,19 @@
 #define CLOSE_STOP_DELAY 100
 #define MAX_ROTATION 50
 
-//#define USE_AUDIO
+#define ENABLE_LOG4ARDUINO
 
 #ifdef ESP32
 #define BUSY 5
 #define CENTER_LED 18
 #define GUN_LEDS 16
 #define RING_LEDS 12
-#define SERVO_A 9
-#define SERVO_B 11
+#define SERVO_A 11
+#define SERVO_B 9
 #define WING_SWITCH 7
-#define PID 3
-#define MP3_TX 40
-#define MP3_RX 38
+#define PID 2
+#define MP3_TX 39
+#define MP3_RX 37
 #else
 #define BUSY D0
 #define CENTER_LED D3
@@ -25,9 +25,9 @@
 #define SERVO_A D6
 #define SERVO_B D7
 #define WING_SWITCH D5
-#define PID A0
 #define MP3_TX TX
 #define MP3_RX RX
+#define PID A0
 #endif
 
 #define CENTER_ANGLE 90
@@ -41,3 +41,6 @@
 
 #define WIFI_CRED_FILE "/settings.txt"
 #define STATIONARY_ANGLE 90
+
+#define DUTYCYLEMIN 411
+#define DUTYCYLEMAX 820
