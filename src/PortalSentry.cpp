@@ -22,7 +22,7 @@ SoftwareSerial softwareSerial(AUDIO_RX, AUDIO_TX);
 #include "Sensors.h"
 #include "Servos.h"
 #include "Settings.h"
-
+#include "LD2450.h"
 
 
 Settings settings;
@@ -51,6 +51,9 @@ Audio audio(settings);
 Sensors sensors(settings);
 Servos servos(settings, sensors);
 LEDs leds;
+#ifdef HARDWARE_V3
+LD2450 radar(Serial1);
+#endif
 
 #include "Routines.h"
 #include "StateBehaviour.h"
@@ -75,6 +78,9 @@ void setup() {
 #endif
 #else
   Serial.begin(74880);
+#endif
+#ifdef HARDWARE_V3
+  Serial1.begin(256000, SERIAL_8N1, RADAR_RX);
 #endif
   settings.Begin();
   sensors.Begin();

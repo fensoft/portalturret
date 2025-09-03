@@ -14,6 +14,8 @@
         #define BCK 7
         #define WS 9
         #define DOUT 5
+        #define RADAR_RX 1
+        #define RADAR_TX 2
     #else
         #define AUDIO_BUSY 5
         #define SERVO_WING 11
