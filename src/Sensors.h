@@ -22,7 +22,12 @@ public:
 
   void Begin() {
     Serial.println("Starting up: sensors");
+#ifdef HARDWARE_V3
+    pinMode(WING_SWITCH, INPUT_PULLDOWN);
+#else
     pinMode(WING_SWITCH, INPUT_PULLUP);
+#endif
+
 #ifndef LEGACY
     pinMode(PID, INPUT);
 #endif
@@ -37,7 +42,11 @@ public:
   }
 
   bool WingsAreOpen() {
+#ifdef HARDWARE_V3
+    return digitalRead(WING_SWITCH) == LOW;
+#else
     return digitalRead(WING_SWITCH) == HIGH;
+#endif
   }
 
   void UpdateSensors() {
